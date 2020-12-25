@@ -1,0 +1,353 @@
+/*
+ * Nextcloud Talk application
+ *
+ * @author Mario Danic
+ * Copyright (C) 2017-2019 Mario Danic <mario@lovelyhq.com>
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <http://www.gnu.org/licenses/>.
+ */
+import com.github.spotbugs.snom.SpotBugsTask
+
+apply plugin: 'com.android.application'
+apply plugin: 'kotlin-android'
+apply plugin: 'com.github.spotbugs'
+apply plugin: 'kotlin-kapt'
+apply plugin: 'kotlin-android-extensions'
+apply plugin: 'kotlin-kapt'
+apply plugin: 'kotlinx-serialization'
+
+def taskRequest = getGradle().getStartParameter().getTaskRequests().toString()
+if (taskRequest.contains("Gplay") || taskRequest.contains("spotbugs") ||
+    taskRequest.contains("lint")) {
+  apply from: 'gplay.gradle'
+}
+
+tasks.withType(org.jetbrains.kotlin.gradle.tasks.KotlinCompile).all {
+  kotlinOptions {
+    jvmTarget = "1.8"
+  }
+}
+
+android {
+  compileSdkVersion 29
+  buildToolsVersion '29.0.3'
+  defaultConfig {
+    applicationId "com.nextcloud.talk2"
+    versionName version
+    minSdkVersion 21
+    targetSdkVersion 29
+    testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
+
+    versionCode 90000055 // 0-50=Alpha / 51-98=RC / 90-99=stable
+    versionName "9.0.0beta5"
+
+    flavorDimensions "default"
+    renderscriptTargetApi 19
+    renderscriptSupportModeEnabled true
+
+    productFlavors {
+      dev {
+        resConfigs "en", "xxxhdpi"
+      }
+      // used for f-droid
+      generic
+      gplay
+    }
+
+    // Enabling multidex support.
+    multiDexEnabled true
+
+    vectorDrawables.useSupportLibrary = true
+
+    lintOptions {
+      disable 'InvalidPackage'
+      disable 'MissingTranslation'
+      disable "ValidController"
+      disable "ValidControllerChangeHandler"
+    }
+
+    javaCompileOptions {
+      annotationProcessorOptions {
+        arguments = ["room.schemaLocation":
+            "$projectDir/schemas".toString()]
+      }
+    }
+
+    /*buildFeatures {
+      // Determines whether to enable support for Jetpack Compose.
+      compose = false
+      // Determines whether to generate a BuildConfig class.
+      buildConfig = true
+      // Determines whether to support View Binding.
+      // Note that the viewBinding.enabled property is now deprecated.
+      viewBinding = true
+      // Determines whether to support Data Binding.
+      // Note that the dataBinding.enabled property is now deprecated.
+      dataBinding = true
+      // Determines whether to generate binder classes for your AIDL files.
+      aidl = true
+      // Determines whether to support RenderScript.
+      renderScript = true
+      // Determines whether to support injecting custom variables into the module’s R class.
+      resValues = true
+      // Determines whether to support shader AOT compilation.
+      shaders = true
+    }*/
+
+    androidExtensions {
+      experimental = true
+    }
+  }
+
+  sourceSets {
+    androidTest.assets.srcDirs += files("$projectDir/schemas".toString())
+  }
+
+  dexOptions {
+    javaMaxHeapSize "4g"
+  }
+
+  buildTypes {
+    debug {
+      applicationIdSuffix '.debug'
+      splits.abi.enable = false
+      splits.density.enable = false
+    }
+
+    release {
+      minifyEnabled false
+      shrinkResources false
+      proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
+    }
+  }
+
+  packagingOptions {
+    exclude 'META-INF/LICENSE'
+    exclude 'META-INF/NOTICE'
+    exclude 'META-INF/rxjava.properties'
+  }
+
+  compileOptions {
+    sourceCompatibility JavaVersion.VERSION_1_8
+    targetCompatibility JavaVersion.VERSION_1_8
+  }
+
+  kotlinOptions {
+    jvmTarget = "1.8"
+  }
+
+  lintOptions {
+    abortOnError false
+    htmlReport true
+    htmlOutput file("$project.buildDir/reports/lint/lint.html")
+    disable 'MissingTranslation'
+  }
+
+    android.applicationVariants.all { variant ->
+        String variantName = variant.name
+        String capVariantName = variantName.substring(0, 1).toUpperCase() + variantName.substring(1)
+        tasks.register("spotbugs${capVariantName}Report", SpotBugsTask) {
+            ignoreFailures = true // should continue checking
+            effort = "max"
+            reportLevel = "medium"
+            classes = fileTree("${project.rootDir}/app/build/intermediates/javac/${variantName}/classes/com/nextcloud/talk/")
+            excludeFilter = file("${project.rootDir}/findbugs-filter.xml")
+
+            reports {
+                xml.enabled = false
+                html {
+                    enabled = true
+                    destination = file("$project.buildDir/reports/spotbugs/spotbugs.html")
+                }
+            }
+        }
+    }
+}
+
+ext {
+  work_version = '2.3.4'
+  koin_version = "2.1.4"
+  lifecycle_version = '2.2.0'
+  coil_version = "0.9.5"
+  room_version = "2.2.5"
+}
+
+configurations.all {
+  exclude group: 'com.google.firebase', module: 'firebase-core'
+  exclude group: 'com.google.firebase', module: 'firebase-analytics'
+  exclude group: 'com.google.firebase', module: 'firebase-measurement-connector'
+}
+
+dependencies {
+  implementation fileTree(include: ['*'], dir: 'libs')
+
+  implementation "org.jetbrains.kotlin:kotlin-stdlib-jdk8:$kotlin_version"
+  implementation "org.jetbrains.kotlinx:kotlinx-serialization-runtime:0.20.0" // JVM dependency
+  // Koin for Android
+  implementation "org.koin:koin-android:$koin_version"
+  // Koin AndroidX Scope features
+  implementation "org.koin:koin-androidx-scope:$koin_version"
+  // Koin AndroidX ViewModel features
+  implementation "org.koin:koin-androidx-viewmodel:$koin_version"
+  // Koin AndroidX Experimental features
+  implementation "org.koin:koin-androidx-ext:$koin_version"
+
+  implementation 'org.jetbrains.kotlinx:kotlinx-coroutines-core:1.3.4'
+  implementation 'org.jetbrains.kotlinx:kotlinx-coroutines-android:1.3.4'
+  implementation "org.jetbrains.kotlin:kotlin-reflect:$kotlin_version"
+
+  implementation "com.github.stateless4j:stateless4j:2.6.0"
+
+  // ViewModel and LiveData
+  implementation "androidx.sqlite:sqlite-ktx:2.1.0"
+  implementation "androidx.collection:collection-ktx:1.1.0"
+  implementation "androidx.lifecycle:lifecycle-extensions:$lifecycle_version"
+  implementation "androidx.lifecycle:lifecycle-livedata:$lifecycle_version"
+  implementation "androidx.lifecycle:lifecycle-common-java8:$lifecycle_version"
+
+  implementation "androidx.lifecycle:lifecycle-viewmodel-ktx:$lifecycle_version"
+  implementation "androidx.lifecycle:lifecycle-runtime-ktx:$lifecycle_version"
+  implementation "androidx.lifecycle:lifecycle-livedata-ktx:$lifecycle_version"
+
+  // optional - ReactiveStreams support for LiveData
+  implementation "androidx.lifecycle:lifecycle-reactivestreams-ktx:$lifecycle_version"
+
+  // optional - Test helpers for LiveData
+  testImplementation "androidx.arch.core:core-testing:2.1.0"
+
+  implementation "androidx.room:room-runtime:$room_version"
+  kapt "androidx.room:room-compiler:$room_version" // For Kotlin use kapt instead of
+  // annotationProcessor
+
+  // optional - Kotlin Extensions and Coroutines support for Room
+  implementation "androidx.room:room-ktx:$room_version"
+
+  // optional - RxJava support for Room
+  implementation "androidx.room:room-rxjava2:$room_version"
+
+  // optional - Guava support for Room, including Optional and ListenableFuture
+  //implementation "androidx.room:room-guava:$room_version"
+
+  // Test helpers
+  testImplementation "androidx.room:room-testing:$room_version"
+
+  implementation "androidx.work:work-runtime-ktx:$work_version"
+  implementation "androidx.work:work-rxjava2:$work_version"
+  androidTestImplementation "androidx.work:work-testing:$work_version"
+
+  implementation 'androidx.appcompat:appcompat:1.2.0-beta01'
+  implementation 'androidx.core:core-ktx:1.3.0-rc01'
+  implementation 'androidx.sharetarget:sharetarget:1.0.0-rc01'
+  implementation 'com.google.android.material:material:1.2.0-alpha06'
+  implementation 'androidx.constraintlayout:constraintlayout:2.0.0-beta4'
+  implementation 'com.github.vanniktech:Emoji:0.6.0'
+  implementation group: 'androidx.emoji', name: 'emoji-bundled', version: '1.0.0'
+  implementation 'org.michaelevans.colorart:library:0.0.3'
+  implementation 'com.google.android:flexbox:2.0.0'
+  implementation 'com.gitlab.bitfireAT:dav4jvm:1.0'
+  implementation 'org.conscrypt:conscrypt-android:2.4.0'
+
+  implementation 'androidx.lifecycle:lifecycle-extensions:2.2.0'
+
+  implementation 'androidx.biometric:biometric:1.0.1'
+  implementation "androidx.lifecycle:lifecycle-extensions:2.2.0"
+
+  implementation 'androidx.multidex:multidex:2.0.1'
+
+  implementation 'io.reactivex.rxjava2:rxandroid:2.1.1'
+  implementation "io.reactivex.rxjava2:rxjava:2.2.19"
+
+  implementation 'com.bluelinelabs:conductor:3.0.0-rc2'
+  implementation 'com.bluelinelabs:conductor-support:3.0.0-rc2'
+  implementation 'com.bluelinelabs:conductor-archlifecycle:3.0.0-rc2'
+  implementation 'com.bluelinelabs:conductor-rxlifecycle2:3.0.0-rc2'
+  implementation 'com.bluelinelabs:conductor-autodispose:3.0.0-rc2'
+  implementation "com.github.miquelbeltran:conductor-viewmodel:1.0.3"
+
+  implementation 'com.squareup.okhttp3:okhttp:3.14.4'
+  implementation 'com.squareup.okhttp3:okhttp-urlconnection:3.14.4'
+  implementation 'com.squareup.okhttp3:logging-interceptor:3.14.4'
+
+  implementation 'com.squareup.retrofit2:retrofit:2.7.2'
+  implementation 'com.squareup.retrofit2:adapter-rxjava2:2.7.2'
+  implementation 'com.github.aurae.retrofit2:converter-logansquare:1.4.1'
+  implementation group: 'joda-time', name: 'joda-time', version: '2.10.5'
+  implementation 'com.bluelinelabs:logansquare:1.3.7'
+  implementation group: 'com.fasterxml.jackson.core', name: 'jackson-core', version: '2.10.2'
+  kapt 'com.bluelinelabs:logansquare-compiler:1.3.7'
+
+  compileOnly 'javax.annotation:jsr250-api:1.0'
+  // Android only
+  implementation 'org.greenrobot:eventbus:3.2.0'
+  implementation 'io.requery:requery:1.5.1'
+  implementation 'io.requery:requery-android:1.5.1'
+  implementation 'net.zetetic:android-database-sqlcipher:3.5.9'
+  kapt 'io.requery:requery-processor:1.5.1'
+  implementation 'net.orange-box.storebox:storebox-lib:1.4.0'
+  compileOnly 'org.projectlombok:lombok:1.18.12'
+  annotationProcessor "org.projectlombok:lombok:1.18.12"
+  kapt "org.projectlombok:lombok:1.18.12"
+
+  implementation 'com.jakewharton:butterknife:10.2.1'
+  kapt 'com.jakewharton:butterknife-compiler:10.2.1'
+  implementation 'eu.davidea:flexible-adapter:5.1.0'
+  implementation 'eu.davidea:flexible-adapter-ui:1.0.0'
+  implementation 'eu.davidea:flexible-adapter-livedata:1.0.0-b3'
+  implementation 'com.otaliastudios:elements:0.3.7'
+  implementation 'org.webrtc:google-webrtc:1.0.23995'
+  implementation 'com.yarolegovich:lovely-dialog:1.1.0'
+  implementation 'com.yarolegovich:lovelyinput:1.0.9'
+  implementation 'com.yarolegovich:mp:1.0.9'
+  implementation 'me.zhanghai.android.effortlesspermissions:library:1.1.0'
+  implementation 'org.apache.commons:commons-lang3:3.9'
+  implementation 'com.github.wooplr:Spotlight:1.3'
+  implementation'com.github.mario:chatkit:d32a7372bb'
+
+  implementation "io.coil-kt:coil:${coil_version}"
+  implementation "io.coil-kt:coil-gif:${coil_version}"
+  implementation "io.coil-kt:coil-svg:${coil_version}"
+
+  implementation 'com.github.natario1:Autocomplete:v1.1.0'
+
+  implementation 'com.github.cotechde.hwsecurity:hwsecurity-fido:2.5.1'
+
+  implementation 'com.novoda:merlin:1.2.1'
+
+  implementation 'com.github.mario:PopupBubble:a365177d96'
+  implementation 'com.amulyakhare:com.amulyakhare.textdrawable:1.0.1'
+  implementation 'eu.medsea.mimeutil:mime-util:2.1.3'
+
+  implementation 'com.afollestad.material-dialogs:core:3.1.0'
+  implementation 'com.afollestad.material-dialogs:datetime:3.1.0'
+  implementation 'com.afollestad.material-dialogs:bottomsheets:3.1.0'
+  implementation 'com.afollestad.material-dialogs:lifecycle:3.1.0'
+
+  implementation 'org.parceler:parceler-api:1.1.13'
+  kapt 'org.parceler:parceler:1.1.13'
+
+  testImplementation 'junit:junit:4.13'
+  testImplementation 'org.mockito:mockito-core:3.3.3'
+  testImplementation 'org.powermock:powermock-core:2.0.5'
+  testImplementation 'org.powermock:powermock-module-junit4:2.0.5'
+  testImplementation 'org.powermock:powermock-api-mockito2:2.0.5'
+
+  androidTestImplementation('androidx.test.espresso:espresso-core:3.3.0-alpha03', {
+    exclude group: 'com.android.support', module: 'support-annotations'
+  })
+  implementation 'androidx.swiperefreshlayout:swiperefreshlayout:1.0.0'
+  implementation 'com.github.Kennyc1012:BottomSheet:2.4.1'
+
+    spotbugsPlugins 'com.h3xstream.findsecbugs:findsecbugs-plugin:1.10.1'
+    spotbugsPlugins 'com.mebigfatguy.fb-contrib:fb-contrib:7.4.7'
+}

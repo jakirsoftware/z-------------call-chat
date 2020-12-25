@@ -1,0 +1,113 @@
+/*
+ *
+ *  * Nextcloud Talk application
+ *  *
+ *  * @author Mario Danic
+ *  * Copyright (C) 2017-2020 Mario Danic <mario@lovelyhq.com>
+ *  *
+ *  * This program is free software: you can redistribute it and/or modify
+ *  * it under the terms of the GNU General Public License as published by
+ *  * the Free Software Foundation, either version 3 of the License, or
+ *  * at your option) any later version.
+ *  *
+ *  * This program is distributed in the hope that it will be useful,
+ *  * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ *  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ *  * GNU General Public License for more details.
+ *  *
+ *  * You should have received a copy of the GNU General Public License
+ *  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
+ *
+ */
+
+package com.nextcloud.talk.newarch.local.dao
+
+import androidx.lifecycle.LiveData
+import androidx.room.*
+import com.nextcloud.talk.newarch.local.models.ConversationEntity
+
+@Dao
+abstract class ConversationsDao {
+
+    @Query("SELECT * FROM conversations WHERE user_id = :userId ORDER BY favorite DESC, last_activity DESC")
+    abstract fun getConversationsForUser(userId: Long): LiveData<List<ConversationEntity>>
+
+    @Query("SELECT * FROM conversations WHERE user_id = :userId AND  display_name LIKE '%' || :filter || '%' ORDER BY favorite DESC, last_activity DESC")
+    abstract fun getConversationsForUserWithFilter(userId: Long, filter: String): LiveData<List<ConversationEntity>>
+
+    @Query("SELECT * FROM conversations WHERE user_id = :userId ORDER BY favorite DESC, last_activity DESC LIMIT 4")
+    abstract fun getShortcutTargetConversations(userId: Long): LiveData<List<ConversationEntity>>
+
+    @Query("DELETE FROM conversations WHERE user_id = :userId")
+    abstract suspend fun clearConversationsForUser(userId: Long)
+
+    @Update(onConflict = OnConflictStrategy.IGNORE)
+    abstract suspend fun update(conversation: ConversationEntity): Int
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    abstract suspend fun insert(conversation: ConversationEntity)
+
+    @Query(
+            "UPDATE conversations SET changing = :changing WHERE user_id = :userId AND conversation_id = :conversationId"
+    )
+    abstract suspend fun updateChangingValueForConversation(
+            userId: Long,
+            conversationId: String,
+            changing: Boolean
+    )
+
+    @Query(
+            "UPDATE conversations SET favorite = :favorite, changing = 0 WHERE user_id = :userId AND conversation_id = :conversationId"
+    )
+    abstract suspend fun updateFavoriteValueForConversation(
+            userId: Long,
+            conversationId: String,
+            favorite: Boolean
+    )
+
+    @Query("DELETE FROM conversations WHERE user_id = :userId AND conversation_id = :conversationId")
+    abstract suspend fun deleteConversation(
+            userId: Long,
+            conversationId: String
+    )
+
+    @Delete
+    abstract suspend fun deleteConversations(vararg conversation: ConversationEntity)
+
+    @Query("DELETE FROM conversations WHERE user_id = :userId AND modified_at < :timestamp")
+    abstract suspend fun deleteConversationsForUserWithTimestamp(
+            userId: Long,
+            timestamp: Long
+    )
+
+    @Query("SELECT * FROM conversations where user_id = :userId AND token = :token")
+    abstract suspend fun getConversationForUserWithToken(userId: Long, token: String): ConversationEntity?
+
+    @Transaction
+    open suspend fun updateConversationsForUser(
+            userId: Long,
+            newConversations: Array<ConversationEntity>,
+            deleteOutdated: Boolean
+    ) {
+        val timestamp = System.currentTimeMillis()
+
+        val conversationsWithTimestampApplied = newConversations.map {
+            it.modifiedAt = timestamp
+            it.userId = userId
+            it.id = it.userId.toString() + "@" + it.token
+            it
+        }
+
+        conversationsWithTimestampApplied.forEach { internalUpsert(it) }
+        if (deleteOutdated) {
+            deleteConversationsForUserWithTimestamp(userId, timestamp)
+        }
+    }
+
+    private suspend fun internalUpsert(conversationEntity: ConversationEntity) {
+        val count = update(conversationEntity)
+        if (count == 0) {
+            insert(conversationEntity)
+        }
+    }
+}
